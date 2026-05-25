@@ -1,5 +1,8 @@
 const express = require("express");
+
 const cors = require("cors");
+
+require("./database/init");
 
 const ingredientRoutes = require("./routes/ingredients");
 const recipeRoutes = require("./routes/recipes");
