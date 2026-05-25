@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@media print {
+  nav,
+  button {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .shadow {
+    box-shadow: none !important;
+  }
+
+  .rounded-2xl {
+    border-radius: 0 !important;
+  }
+
+  .grid {
+    display: block !important;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    border: 1px solid #ccc;
+    padding: 8px;
+  }
+}
