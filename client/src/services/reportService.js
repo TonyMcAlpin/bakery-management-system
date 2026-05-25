@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API_URL =
-  "http://localhost:5000/reports";
+  "https://bakery-management-system-gzme.onrender.com/auth";
 
 function getAuthHeaders() {
   const token =
