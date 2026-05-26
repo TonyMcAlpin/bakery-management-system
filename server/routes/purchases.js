@@ -1,4 +1,5 @@
-const express = require("express");
+const express =
+  require("express");
 
 const router =
   express.Router();
@@ -17,26 +18,26 @@ router.get(
   "/",
   authenticateToken,
   (req, res) => {
-    const sql = `
-      SELECT *
-      FROM purchases
-      WHERE user_id = ?
-      ORDER BY purchase_date DESC
-    `;
+    try {
+      const stmt =
+        db.prepare(`
+          SELECT *
+          FROM purchases
+          WHERE user_id = ?
+          ORDER BY purchase_date DESC
+        `);
 
-    db.all(
-      sql,
-      [req.user.id],
-      (err, rows) => {
-        if (err) {
-          res
-            .status(500)
-            .json(err);
-        } else {
-          res.json(rows);
-        }
-      }
-    );
+      const rows =
+        stmt.all(req.user.id);
+
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -44,50 +45,46 @@ router.post(
   "/",
   authenticateToken,
   (req, res) => {
-    const {
-      supplier,
-      purchaseDate,
-      items,
-    } = req.body;
-
-    const totalCost =
-      items.reduce(
-        (sum, item) =>
-          sum +
-          Number(item.cost),
-        0
-      );
-
-    const purchaseSql = `
-      INSERT INTO purchases
-      (
-        user_id,
-        supplier,
-        purchase_date,
-        total_cost
-      )
-      VALUES (?, ?, ?, ?)
-    `;
-
-    db.run(
-      purchaseSql,
-      [
-        req.user.id,
+    try {
+      const {
         supplier,
         purchaseDate,
-        totalCost,
-      ],
-      function (err) {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+        items,
+      } = req.body;
 
-        const purchaseId =
-          this.lastID;
+      const totalCost =
+        items.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.cost),
+          0
+        );
 
-        const itemSql = `
+      const purchaseStmt =
+        db.prepare(`
+          INSERT INTO purchases
+          (
+            user_id,
+            supplier,
+            purchase_date,
+            total_cost
+          )
+          VALUES (?, ?, ?, ?)
+        `);
+
+      const purchaseResult =
+        purchaseStmt.run(
+          req.user.id,
+          supplier,
+          purchaseDate,
+          totalCost
+        );
+
+      const purchaseId =
+        purchaseResult.lastInsertRowid;
+
+      const itemStmt =
+        db.prepare(`
           INSERT INTO purchase_items
           (
             purchase_id,
@@ -97,109 +94,98 @@ router.post(
             cost
           )
           VALUES (?, ?, ?, ?, ?)
-        `;
+        `);
 
-        items.forEach(
-          (item) => {
-            db.run(
-              itemSql,
-              [
-                purchaseId,
-                item.ingredientId,
-                item.quantity,
-                item.unit,
-                item.cost,
-              ]
+      const ingredientStmt =
+        db.prepare(`
+          SELECT base_unit
+          FROM ingredients
+          WHERE id = ?
+          AND user_id = ?
+        `);
+
+      const updateIngredientStmt =
+        db.prepare(`
+          UPDATE ingredients
+          SET
+            quantity = quantity + ?,
+            cost_per_unit = ?
+          WHERE id = ?
+          AND user_id = ?
+        `);
+
+      items.forEach(
+        (item) => {
+          itemStmt.run(
+            purchaseId,
+            item.ingredientId,
+            item.quantity,
+            item.unit,
+            item.cost
+          );
+
+          const ingredient =
+            ingredientStmt.get(
+              item.ingredientId,
+              req.user.id
             );
 
-            db.get(
-              `
-              SELECT base_unit
-              FROM ingredients
-              WHERE id = ?
-              AND user_id = ?
-              `,
-              [
-                item.ingredientId,
-                req.user.id,
-              ],
-              (
-                err,
-                ingredient
-              ) => {
-                if (err) {
-                  console.error(
-                    err
-                  );
-
-                  return;
-                }
-
-                if (
-                  !ingredient ||
-                  !ingredient.base_unit
-                ) {
-                  console.error(
-                    "Ingredient not found:",
-                    item.ingredientId
-                  );
-
-                  return;
-                }
-
-                let convertedQuantity = 0;
-
-                try {
-                  convertedQuantity =
-                    convertUnits(
-                      Number(
-                        item.quantity
-                      ),
-                      item.unit,
-                      ingredient.base_unit
-                    );
-                } catch (error) {
-                  console.error(
-                    "Unit conversion failed:",
-                    error.message
-                  );
-
-                  return;
-                }
-
-                const unitCost =
-                  Number(
-                    item.cost
-                  ) /
-                  convertedQuantity;
-
-                db.run(
-                  `
-                  UPDATE ingredients
-                  SET
-                    quantity = quantity + ?,
-                    cost_per_unit = ?
-                  WHERE id = ?
-                  AND user_id = ?
-                  `,
-                  [
-                    convertedQuantity,
-                    unitCost,
-                    item.ingredientId,
-                    req.user.id,
-                  ]
-                );
-              }
+          if (
+            !ingredient ||
+            !ingredient.base_unit
+          ) {
+            console.error(
+              "Ingredient not found:",
+              item.ingredientId
             );
+
+            return;
           }
-        );
 
-        res.json({
-          message:
-            "Purchase saved",
-        });
-      }
-    );
+          let convertedQuantity = 0;
+
+          try {
+            convertedQuantity =
+              convertUnits(
+                Number(
+                  item.quantity
+                ),
+                item.unit,
+                ingredient.base_unit
+              );
+          } catch (error) {
+            console.error(
+              "Unit conversion failed:",
+              error.message
+            );
+
+            return;
+          }
+
+          const unitCost =
+            Number(item.cost) /
+            convertedQuantity;
+
+          updateIngredientStmt.run(
+            convertedQuantity,
+            unitCost,
+            item.ingredientId,
+            req.user.id
+          );
+        }
+      );
+
+      res.json({
+        message:
+          "Purchase saved",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -207,141 +193,116 @@ router.delete(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    const itemSql = `
-      SELECT *
-      FROM purchase_items
-      WHERE purchase_id = ?
-    `;
+      const itemStmt =
+        db.prepare(`
+          SELECT *
+          FROM purchase_items
+          WHERE purchase_id = ?
+        `);
 
-    db.all(
-      itemSql,
-      [id],
-      (err, items) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const items =
+        itemStmt.all(id);
 
-        items.forEach(
-          (item) => {
-            db.get(
-              `
-              SELECT base_unit
-              FROM ingredients
-              WHERE id = ?
-              AND user_id = ?
-              `,
-              [
-                item.ingredient_id,
-                req.user.id,
-              ],
-              (
-                err,
-                ingredient
-              ) => {
-                if (err) {
-                  console.error(
-                    err
-                  );
+      const ingredientStmt =
+        db.prepare(`
+          SELECT base_unit
+          FROM ingredients
+          WHERE id = ?
+          AND user_id = ?
+        `);
 
-                  return;
-                }
+      const updateIngredientStmt =
+        db.prepare(`
+          UPDATE ingredients
+          SET quantity =
+            quantity - ?
+          WHERE id = ?
+          AND user_id = ?
+        `);
 
-                if (
-                  !ingredient ||
-                  !ingredient.base_unit
-                ) {
-                  console.error(
-                    "Ingredient not found:",
-                    item.ingredient_id
-                  );
-
-                  return;
-                }
-
-                let convertedQuantity = 0;
-
-                try {
-                  convertedQuantity =
-                    convertUnits(
-                      Number(
-                        item.quantity
-                      ),
-                      item.unit,
-                      ingredient.base_unit
-                    );
-                } catch (error) {
-                  console.error(
-                    "Unit conversion failed:",
-                    error.message
-                  );
-
-                  return;
-                }
-
-                db.run(
-                  `
-                  UPDATE ingredients
-                  SET quantity =
-                    quantity - ?
-                  WHERE id = ?
-                  AND user_id = ?
-                  `,
-                  [
-                    convertedQuantity,
-                    item.ingredient_id,
-                    req.user.id,
-                  ]
-                );
-              }
+      items.forEach(
+        (item) => {
+          const ingredient =
+            ingredientStmt.get(
+              item.ingredient_id,
+              req.user.id
             );
-          }
-        );
 
-        db.run(
-          `
+          if (
+            !ingredient ||
+            !ingredient.base_unit
+          ) {
+            console.error(
+              "Ingredient not found:",
+              item.ingredient_id
+            );
+
+            return;
+          }
+
+          let convertedQuantity = 0;
+
+          try {
+            convertedQuantity =
+              convertUnits(
+                Number(
+                  item.quantity
+                ),
+                item.unit,
+                ingredient.base_unit
+              );
+          } catch (error) {
+            console.error(
+              "Unit conversion failed:",
+              error.message
+            );
+
+            return;
+          }
+
+          updateIngredientStmt.run(
+            convertedQuantity,
+            item.ingredient_id,
+            req.user.id
+          );
+        }
+      );
+
+      const deleteItemsStmt =
+        db.prepare(`
           DELETE FROM purchase_items
           WHERE purchase_id = ?
-          `,
-          [id],
-          (err) => {
-            if (err) {
-              return res
-                .status(500)
-                .json(err);
-            }
+        `);
 
-            db.run(
-              `
-              DELETE FROM purchases
-              WHERE id = ?
-              AND user_id = ?
-              `,
-              [
-                id,
-                req.user.id,
-              ],
-              function (err) {
-                if (err) {
-                  res
-                    .status(500)
-                    .json(err);
-                } else {
-                  res.json({
-                    message:
-                      "Purchase deleted",
-                  });
-                }
-              }
-            );
-          }
-        );
-      }
-    );
+      deleteItemsStmt.run(id);
+
+      const deletePurchaseStmt =
+        db.prepare(`
+          DELETE FROM purchases
+          WHERE id = ?
+          AND user_id = ?
+        `);
+
+      deletePurchaseStmt.run(
+        id,
+        req.user.id
+      );
+
+      res.json({
+        message:
+          "Purchase deleted",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 

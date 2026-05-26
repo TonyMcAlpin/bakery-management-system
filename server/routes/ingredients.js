@@ -1,4 +1,5 @@
-const express = require("express");
+const express =
+  require("express");
 
 const router =
   express.Router();
@@ -13,26 +14,26 @@ router.get(
   "/",
   authenticateToken,
   (req, res) => {
-    const sql = `
-      SELECT *
-      FROM ingredients
-      WHERE user_id = ?
-      ORDER BY name ASC
-    `;
+    try {
+      const stmt =
+        db.prepare(`
+          SELECT *
+          FROM ingredients
+          WHERE user_id = ?
+          ORDER BY name ASC
+        `);
 
-    db.all(
-      sql,
-      [req.user.id],
-      (err, rows) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const rows =
+        stmt.all(req.user.id);
 
-        res.json(rows);
-      }
-    );
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -40,35 +41,8 @@ router.post(
   "/",
   authenticateToken,
   (req, res) => {
-    const {
-      name,
-      quantity,
-      unit,
-      baseUnit,
-      costPerUnit,
-      supplier,
-      minimumStock,
-    } = req.body;
-
-    const sql = `
-      INSERT INTO ingredients
-      (
-        user_id,
-        name,
-        quantity,
-        unit,
-        base_unit,
-        cost_per_unit,
-        supplier,
-        minimum_stock
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    db.run(
-      sql,
-      [
-        req.user.id,
+    try {
+      const {
         name,
         quantity,
         unit,
@@ -76,19 +50,47 @@ router.post(
         costPerUnit,
         supplier,
         minimumStock,
-      ],
-      function (err) {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      } = req.body;
 
-        res.json({
-          id: this.lastID,
-        });
-      }
-    );
+      const stmt =
+        db.prepare(`
+          INSERT INTO ingredients
+          (
+            user_id,
+            name,
+            quantity,
+            unit,
+            base_unit,
+            cost_per_unit,
+            supplier,
+            minimum_stock
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+      const result =
+        stmt.run(
+          req.user.id,
+          name,
+          quantity,
+          unit,
+          baseUnit,
+          costPerUnit,
+          supplier,
+          minimumStock
+        );
+
+      res.json({
+        id:
+          result.lastInsertRowid,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -96,36 +98,36 @@ router.put(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    const {
-      name,
-      quantity,
-      unit,
-      baseUnit,
-      costPerUnit,
-      supplier,
-      minimumStock,
-    } = req.body;
+      const {
+        name,
+        quantity,
+        unit,
+        baseUnit,
+        costPerUnit,
+        supplier,
+        minimumStock,
+      } = req.body;
 
-    const sql = `
-      UPDATE ingredients
-      SET
-        name = ?,
-        quantity = ?,
-        unit = ?,
-        base_unit = ?,
-        cost_per_unit = ?,
-        supplier = ?,
-        minimum_stock = ?
-      WHERE id = ?
-      AND user_id = ?
-    `;
+      const stmt =
+        db.prepare(`
+          UPDATE ingredients
+          SET
+            name = ?,
+            quantity = ?,
+            unit = ?,
+            base_unit = ?,
+            cost_per_unit = ?,
+            supplier = ?,
+            minimum_stock = ?
+          WHERE id = ?
+          AND user_id = ?
+        `);
 
-    db.run(
-      sql,
-      [
+      stmt.run(
         name,
         quantity,
         unit,
@@ -134,21 +136,20 @@ router.put(
         supplier,
         minimumStock,
         id,
-        req.user.id,
-      ],
-      function (err) {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+        req.user.id
+      );
 
-        res.json({
-          message:
-            "Ingredient updated",
-        });
-      }
-    );
+      res.json({
+        message:
+          "Ingredient updated",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -156,31 +157,33 @@ router.delete(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    const sql = `
-      DELETE FROM ingredients
-      WHERE id = ?
-      AND user_id = ?
-    `;
+      const stmt =
+        db.prepare(`
+          DELETE FROM ingredients
+          WHERE id = ?
+          AND user_id = ?
+        `);
 
-    db.run(
-      sql,
-      [id, req.user.id],
-      function (err) {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      stmt.run(
+        id,
+        req.user.id
+      );
 
-        res.json({
-          message:
-            "Ingredient deleted",
-        });
-      }
-    );
+      res.json({
+        message:
+          "Ingredient deleted",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 

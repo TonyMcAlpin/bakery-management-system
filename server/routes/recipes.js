@@ -1,4 +1,5 @@
-const express = require("express");
+const express =
+  require("express");
 
 const router =
   express.Router();
@@ -13,26 +14,26 @@ router.get(
   "/",
   authenticateToken,
   (req, res) => {
-    const sql = `
-      SELECT *
-      FROM recipes
-      WHERE user_id = ?
-      ORDER BY name ASC
-    `;
+    try {
+      const stmt =
+        db.prepare(`
+          SELECT *
+          FROM recipes
+          WHERE user_id = ?
+          ORDER BY name ASC
+        `);
 
-    db.all(
-      sql,
-      [req.user.id],
-      (err, recipes) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const recipes =
+        stmt.all(req.user.id);
 
-        res.json(recipes);
-      }
-    );
+      res.json(recipes);
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -40,35 +41,35 @@ router.get(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    db.get(
-      `
-      SELECT *
-      FROM recipes
-      WHERE id = ?
-      AND user_id = ?
-      `,
-      [id, req.user.id],
-      (err, recipe) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const recipeStmt =
+        db.prepare(`
+          SELECT *
+          FROM recipes
+          WHERE id = ?
+          AND user_id = ?
+        `);
 
-        if (!recipe) {
-          return res
-            .status(404)
-            .json({
-              message:
-                "Recipe not found",
-            });
-        }
+      const recipe =
+        recipeStmt.get(
+          id,
+          req.user.id
+        );
 
-        db.all(
-          `
+      if (!recipe) {
+        return res
+          .status(404)
+          .json({
+            message:
+              "Recipe not found",
+          });
+      }
+
+      const ingredientStmt =
+        db.prepare(`
           SELECT
             recipe_ingredients.*,
             ingredients.name
@@ -80,26 +81,22 @@ router.get(
             ingredients.id
 
           WHERE recipe_id = ?
-          `,
-          [id],
-          (
-            err,
-            ingredients
-          ) => {
-            if (err) {
-              return res
-                .status(500)
-                .json(err);
-            }
+        `);
 
-            recipe.ingredients =
-              ingredients;
+      const ingredients =
+        ingredientStmt.all(id);
 
-            res.json(recipe);
-          }
-        );
-      }
-    );
+      recipe.ingredients =
+        ingredients;
+
+      res.json(recipe);
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -107,104 +104,101 @@ router.get(
   "/:id/cost",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    const sql = `
-      SELECT
-        ingredients.name,
-        recipe_ingredients.quantity,
-        ingredients.cost_per_unit
+      const stmt =
+        db.prepare(`
+          SELECT
+            ingredients.name,
+            recipe_ingredients.quantity,
+            ingredients.cost_per_unit
 
-      FROM recipe_ingredients
+          FROM recipe_ingredients
 
-      JOIN ingredients
-        ON recipe_ingredients.ingredient_id =
-        ingredients.id
+          JOIN ingredients
+            ON recipe_ingredients.ingredient_id =
+            ingredients.id
 
-      JOIN recipes
-        ON recipe_ingredients.recipe_id =
-        recipes.id
+          JOIN recipes
+            ON recipe_ingredients.recipe_id =
+            recipes.id
 
-      WHERE recipe_id = ?
-      AND recipes.user_id = ?
-    `;
+          WHERE recipe_id = ?
+          AND recipes.user_id = ?
+        `);
 
-    db.all(
-      sql,
-      [id, req.user.id],
-      (err, rows) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const rows =
+        stmt.all(
+          id,
+          req.user.id
+        );
 
-        let totalRecipeCost = 0;
+      let totalRecipeCost = 0;
 
-        const breakdown =
-          rows.map((row) => {
-            const ingredientCost =
-              row.quantity *
-              row.cost_per_unit;
+      const breakdown =
+        rows.map((row) => {
+          const ingredientCost =
+            row.quantity *
+            row.cost_per_unit;
 
-            totalRecipeCost +=
-              ingredientCost;
+          totalRecipeCost +=
+            ingredientCost;
 
-            return {
-              ingredient:
-                row.name,
+          return {
+            ingredient:
+              row.name,
 
-              quantity:
-                row.quantity,
+            quantity:
+              row.quantity,
 
-              unitCost:
-                row.cost_per_unit.toFixed(
-                  2
-                ),
+            unitCost:
+              row.cost_per_unit.toFixed(
+                2
+              ),
 
-              ingredientCost:
-                ingredientCost.toFixed(
-                  2
-                ),
-            };
-          });
+            ingredientCost:
+              ingredientCost.toFixed(
+                2
+              ),
+          };
+        });
 
-        db.get(
-          `
+      const recipeStmt =
+        db.prepare(`
           SELECT yield_quantity
           FROM recipes
           WHERE id = ?
-          `,
-          [id],
-          (err, recipe) => {
-            if (err) {
-              return res
-                .status(500)
-                .json(err);
-            }
+        `);
 
-            const costPerItem =
-              totalRecipeCost /
-              recipe.yield_quantity;
+      const recipe =
+        recipeStmt.get(id);
 
-            res.json({
-              totalRecipeCost:
-                totalRecipeCost.toFixed(
-                  2
-                ),
+      const costPerItem =
+        totalRecipeCost /
+        recipe.yield_quantity;
 
-              costPerItem:
-                costPerItem.toFixed(
-                  2
-                ),
+      res.json({
+        totalRecipeCost:
+          totalRecipeCost.toFixed(
+            2
+          ),
 
-              breakdown,
-            });
-          }
-        );
-      }
-    );
+        costPerItem:
+          costPerItem.toFixed(
+            2
+          ),
+
+        breakdown,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -212,66 +206,68 @@ router.post(
   "/",
   authenticateToken,
   (req, res) => {
-    const {
-      name,
-      yieldQuantity,
-      ingredients,
-    } = req.body;
-
-    db.run(
-      `
-      INSERT INTO recipes
-      (
-        user_id,
-        name,
-        yield_quantity
-      )
-      VALUES (?, ?, ?)
-      `,
-      [
-        req.user.id,
+    try {
+      const {
         name,
         yieldQuantity,
-      ],
-      function (err) {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+        ingredients,
+      } = req.body;
 
-        const recipeId =
-          this.lastID;
+      const recipeStmt =
+        db.prepare(`
+          INSERT INTO recipes
+          (
+            user_id,
+            name,
+            yield_quantity
+          )
+          VALUES (?, ?, ?)
+        `);
 
-        ingredients.forEach(
-          (ingredient) => {
-            db.run(
-              `
-              INSERT INTO recipe_ingredients
-              (
-                recipe_id,
-                ingredient_id,
-                quantity,
-                unit
-              )
-              VALUES (?, ?, ?, ?)
-              `,
-              [
-                recipeId,
-                ingredient.ingredientId,
-                ingredient.quantity,
-                ingredient.unit,
-              ]
-            );
-          }
+      const result =
+        recipeStmt.run(
+          req.user.id,
+          name,
+          yieldQuantity
         );
 
-        res.json({
-          message:
-            "Recipe created",
-        });
-      }
-    );
+      const recipeId =
+        result.lastInsertRowid;
+
+      const ingredientStmt =
+        db.prepare(`
+          INSERT INTO recipe_ingredients
+          (
+            recipe_id,
+            ingredient_id,
+            quantity,
+            unit
+          )
+          VALUES (?, ?, ?, ?)
+        `);
+
+      ingredients.forEach(
+        (ingredient) => {
+          ingredientStmt.run(
+            recipeId,
+            ingredient.ingredientId,
+            ingredient.quantity,
+            ingredient.unit
+          );
+        }
+      );
+
+      res.json({
+        message:
+          "Recipe created",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -279,83 +275,75 @@ router.put(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    const {
-      name,
-      yieldQuantity,
-      ingredients,
-    } = req.body;
+      const {
+        name,
+        yieldQuantity,
+        ingredients,
+      } = req.body;
 
-    db.run(
-      `
-      UPDATE recipes
-      SET
-        name = ?,
-        yield_quantity = ?
-      WHERE id = ?
-      AND user_id = ?
-      `,
-      [
+      const updateStmt =
+        db.prepare(`
+          UPDATE recipes
+          SET
+            name = ?,
+            yield_quantity = ?
+          WHERE id = ?
+          AND user_id = ?
+        `);
+
+      updateStmt.run(
         name,
         yieldQuantity,
         id,
-        req.user.id,
-      ],
-      (err) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+        req.user.id
+      );
 
-        db.run(
-          `
+      const deleteStmt =
+        db.prepare(`
           DELETE FROM recipe_ingredients
           WHERE recipe_id = ?
-          `,
-          [id],
-          (err) => {
-            if (err) {
-              return res
-                .status(500)
-                .json(err);
-            }
+        `);
 
-            ingredients.forEach(
-              (
-                ingredient
-              ) => {
-                db.run(
-                  `
-                  INSERT INTO recipe_ingredients
-                  (
-                    recipe_id,
-                    ingredient_id,
-                    quantity,
-                    unit
-                  )
-                  VALUES (?, ?, ?, ?)
-                  `,
-                  [
-                    id,
-                    ingredient.ingredientId,
-                    ingredient.quantity,
-                    ingredient.unit,
-                  ]
-                );
-              }
-            );
+      deleteStmt.run(id);
 
-            res.json({
-              message:
-                "Recipe updated",
-            });
-          }
-        );
-      }
-    );
+      const insertStmt =
+        db.prepare(`
+          INSERT INTO recipe_ingredients
+          (
+            recipe_id,
+            ingredient_id,
+            quantity,
+            unit
+          )
+          VALUES (?, ?, ?, ?)
+        `);
+
+      ingredients.forEach(
+        (ingredient) => {
+          insertStmt.run(
+            id,
+            ingredient.ingredientId,
+            ingredient.quantity,
+            ingredient.unit
+          );
+        }
+      );
+
+      res.json({
+        message:
+          "Recipe updated",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
@@ -363,44 +351,43 @@ router.delete(
   "/:id",
   authenticateToken,
   (req, res) => {
-    const { id } =
-      req.params;
+    try {
+      const { id } =
+        req.params;
 
-    db.run(
-      `
-      DELETE FROM recipe_ingredients
-      WHERE recipe_id = ?
-      `,
-      [id],
-      (err) => {
-        if (err) {
-          return res
-            .status(500)
-            .json(err);
-        }
+      const deleteIngredientsStmt =
+        db.prepare(`
+          DELETE FROM recipe_ingredients
+          WHERE recipe_id = ?
+        `);
 
-        db.run(
-          `
+      deleteIngredientsStmt.run(
+        id
+      );
+
+      const deleteRecipeStmt =
+        db.prepare(`
           DELETE FROM recipes
           WHERE id = ?
           AND user_id = ?
-          `,
-          [id, req.user.id],
-          function (err) {
-            if (err) {
-              return res
-                .status(500)
-                .json(err);
-            }
+        `);
 
-            res.json({
-              message:
-                "Recipe deleted",
-            });
-          }
-        );
-      }
-    );
+      deleteRecipeStmt.run(
+        id,
+        req.user.id
+      );
+
+      res.json({
+        message:
+          "Recipe deleted",
+      });
+    } catch (error) {
+      console.error(error);
+
+      res
+        .status(500)
+        .json(error);
+    }
   }
 );
 
