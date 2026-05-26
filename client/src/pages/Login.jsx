@@ -5,7 +5,14 @@ import {
   saveToken,
 } from "../services/authService";
 
+import {
+  useNavigate,
+} from "react-router-dom";
+
 function Login() {
+  const navigate =
+    useNavigate();
+
   const [username, setUsername] =
     useState("");
 
@@ -29,8 +36,7 @@ function Login() {
 
       saveToken(data.token);
 
-      window.location.href =
-        "/";
+      navigate("/dashboard");
     } catch (error) {
       console.error(error);
 
