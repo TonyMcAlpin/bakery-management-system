@@ -1,6 +1,8 @@
-const jwt = require("jsonwebtoken");
+const jwt =
+  require("jsonwebtoken");
 
 const SECRET =
+  process.env.JWT_SECRET ||
   "supersecretkey";
 
 function authenticateToken(
@@ -32,24 +34,29 @@ function authenticateToken(
       });
   }
 
-  jwt.verify(
-    token,
-    SECRET,
-    (err, user) => {
-      if (err) {
-        return res
-          .status(403)
-          .json({
-            message:
-              "Token invalid",
-          });
-      }
+  try {
+    const user =
+      jwt.verify(
+        token,
+        SECRET
+      );
 
-      req.user = user;
+    req.user = user;
 
-      next();
-    }
-  );
+    next();
+  } catch (error) {
+    console.error(
+      "JWT VERIFY ERROR:",
+      error.message
+    );
+
+    return res
+      .status(403)
+      .json({
+        message:
+          "Token invalid",
+      });
+  }
 }
 
 module.exports =
