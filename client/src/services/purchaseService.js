@@ -1,8 +1,8 @@
 import axios from "axios";
 
 const API_URL =
-  "https://bakery-management-system-gzme.onrender.com/auth";
-  
+  "https://bakery-management-system-gzme.onrender.com/purchase";
+
 function getAuthHeaders() {
   const token =
     localStorage.getItem(
