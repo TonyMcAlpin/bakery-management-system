@@ -14,8 +14,7 @@ const db =
   require("../database/db");
 
 const SECRET =
-  process.env.JWT_SECRET ||
-  "supersecretkey";
+  process.env.JWT_SECRET;
 
 router.post(
   "/register",
