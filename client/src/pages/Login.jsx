@@ -34,9 +34,14 @@ function Login() {
           password
         );
 
+      console.log(
+        "LOGIN RESPONSE:",
+        data
+      );
+
       saveToken(data.token);
 
-      navigate("/dashboard");
+      navigate("/");
     } catch (error) {
       console.error(error);
 
