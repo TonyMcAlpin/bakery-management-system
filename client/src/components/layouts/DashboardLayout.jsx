@@ -4,14 +4,20 @@ import {
   logout,
 } from "../../services/authService";
 
+import {
+  useNavigate,
+} from "react-router-dom";
+
 function DashboardLayout({
   children,
 }) {
+  const navigate =
+    useNavigate();
+
   function handleLogout() {
     logout();
 
-    window.location.href =
-      "/login";
+    navigate("/");
   }
 
   return (
